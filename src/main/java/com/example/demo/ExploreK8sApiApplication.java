@@ -1,5 +1,7 @@
 package com.example.demo;
 
+import java.util.UUID;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -8,21 +10,15 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import com.google.common.collect.ImmutableMap;
 
 import io.kubernetes.client.ApiClient;
-import io.kubernetes.client.apis.CoreV1Api;
 import io.kubernetes.client.apis.ExtensionsV1beta1Api;
 import io.kubernetes.client.models.ExtensionsV1beta1Deployment;
 import io.kubernetes.client.models.ExtensionsV1beta1DeploymentBuilder;
-import io.kubernetes.client.models.ExtensionsV1beta1DeploymentSpec;
 import io.kubernetes.client.models.ExtensionsV1beta1DeploymentSpecBuilder;
-import io.kubernetes.client.models.V1Container;
-import io.kubernetes.client.models.V1LabelSelector;
-import io.kubernetes.client.models.V1LabelSelectorBuilder;
+import io.kubernetes.client.models.V1ContainerPortBuilder;
 import io.kubernetes.client.models.V1ObjectMeta;
-import io.kubernetes.client.models.V1Pod;
-import io.kubernetes.client.models.V1PodList;
-import io.kubernetes.client.models.V1PodSpec;
-import io.kubernetes.client.models.V1PodTemplateSpec;
+import io.kubernetes.client.models.V1PodSecurityContextBuilder;
 import io.kubernetes.client.models.V1PodTemplateSpecBuilder;
+import io.kubernetes.client.models.V1VolumeMountBuilder;
 
 @SpringBootApplication
 public class ExploreK8sApiApplication implements CommandLineRunner {
@@ -34,37 +30,74 @@ public class ExploreK8sApiApplication implements CommandLineRunner {
 	@Autowired
 	ApiClient client;
 	
-//	@Override
-//	public void run(String... args) throws Exception {
-//	    // invokes the CoreV1Api client
-//		CoreV1Api api = new CoreV1Api(client);
-//	    V1PodList list = api.listPodForAllNamespaces(null, null, null, null, null, null, null, null, null);
-//	    for (V1Pod item : list.getItems()) {
-//	      System.out.println(item.getMetadata().getName());
-//	    }
-//
-//	}
-
 	@Override
 	public void run(String... args) throws Exception {
 		//kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
 
 		client.setDebugging(true);
+		ExtensionsV1beta1Deployment r = deployTheiaEnvironment("https://github.com/spring-projects/spring-petclinic.git");
+		System.out.println("Deploy success!");
+		System.out.println(r);
+	}
 
-		V1ObjectMeta metadata = new V1ObjectMeta()
-				.name("hello-node")
-				.labels(ImmutableMap.of("app", "hello-node"));
-		
+	private ExtensionsV1beta1Deployment deployTheiaEnvironment(String gitRepoUrl) throws Exception {
+		String appName = "theia-spring-boot";
+		String dockerImage = "kdvolder/theia-spring-boot";
+		String deploymentName = appName+"-"+UUID.randomUUID();
 		ExtensionsV1beta1Deployment body = new ExtensionsV1beta1DeploymentBuilder()
-		.withMetadata(metadata)
+		.withMetadata(new V1ObjectMeta().name(deploymentName)
+			.labels(ImmutableMap.of("app", appName))
+		)
 		.withSpec(new ExtensionsV1beta1DeploymentSpecBuilder()
 			.withTemplate(new V1PodTemplateSpecBuilder()
-				.withMetadata(metadata)
+				.withMetadata(new V1ObjectMeta().name(appName)
+						.labels(ImmutableMap.of("app", appName))
+				)
 				.withNewSpec()
+					.withSecurityContext(new V1PodSecurityContextBuilder()
+						.withRunAsUser(0L) //Not sure why this is necessary, as far I understand, it shouldn't be. 
+											// But for some reason, if we don't force to run as 'root' then git clone is run
+											// as another user which causes permission issues for the cloned files.
+						.build()
+					)
 					.addNewContainer()
-						.withName("hello-node")
-						.withImage("gcr.io/hello-minikube-zero-install/hello-node")
+						.withName(appName)
+						.withImage(dockerImage)
+						.withPorts(new V1ContainerPortBuilder()
+							.withContainerPort(3000)
+							.build()
+						)
+						.withVolumeMounts(new V1VolumeMountBuilder()
+							.withName("source")
+							.withMountPath("/home/project")
+							.build()
+						)
+//						.withResources(new V1ResourceRequirementsBuilder()
+//							.withRequests(ImmutableMap.of(
+//								"cpu", Quantity.fromString("2000m"),
+//								"memory",  Quantity.fromString("1000M")
+//							))
+//							.build()
+//						)
 					.endContainer()
+					.addNewInitContainer()
+						.withName("git-clone")
+						.withImage("alpine/git")
+						.withWorkingDir("/tmp/git")
+						.withCommand(
+							"git", "clone", gitRepoUrl
+						)
+						.withVolumeMounts(new V1VolumeMountBuilder()
+							.withName("source")
+							.withMountPath("/tmp/git")
+							.build()
+						)
+					.endInitContainer()
+					.addNewVolume()
+						.withName("source")
+						.withNewEmptyDir()
+						.endEmptyDir()
+					.endVolume()
 				.endSpec()
 				.build()
 			)
@@ -73,18 +106,13 @@ public class ExploreK8sApiApplication implements CommandLineRunner {
 		.build();
 		
 		ExtensionsV1beta1Api api = new ExtensionsV1beta1Api(client);
-		try {
-			ExtensionsV1beta1Deployment r = api.createNamespacedDeployment(
-					/*namespace*/ "default", 
-					body, 
-					/*includeUninitialized*/ true, 
-					/*pretty*/ null, 
-					/*dryRun*/ null
-			);
-			System.out.println(r);
-		} catch (Exception e) {
-			System.out.println(e);
-		}
+		ExtensionsV1beta1Deployment r = api.createNamespacedDeployment(
+				/*namespace*/ "default", 
+				body, 
+				/*includeUninitialized*/ true, 
+				/*pretty*/ null, 
+				/*dryRun*/ null
+		);
+		return r;
 	}
-	
 }
