@@ -11,7 +11,9 @@ import io.kubernetes.client.ApiClient;
 import io.kubernetes.client.apis.CoreV1Api;
 import io.kubernetes.client.apis.ExtensionsV1beta1Api;
 import io.kubernetes.client.models.ExtensionsV1beta1Deployment;
+import io.kubernetes.client.models.ExtensionsV1beta1DeploymentBuilder;
 import io.kubernetes.client.models.ExtensionsV1beta1DeploymentSpec;
+import io.kubernetes.client.models.ExtensionsV1beta1DeploymentSpecBuilder;
 import io.kubernetes.client.models.V1Container;
 import io.kubernetes.client.models.V1LabelSelector;
 import io.kubernetes.client.models.V1LabelSelectorBuilder;
@@ -20,6 +22,7 @@ import io.kubernetes.client.models.V1Pod;
 import io.kubernetes.client.models.V1PodList;
 import io.kubernetes.client.models.V1PodSpec;
 import io.kubernetes.client.models.V1PodTemplateSpec;
+import io.kubernetes.client.models.V1PodTemplateSpecBuilder;
 
 @SpringBootApplication
 public class ExploreK8sApiApplication implements CommandLineRunner {
@@ -48,32 +51,27 @@ public class ExploreK8sApiApplication implements CommandLineRunner {
 
 		client.setDebugging(true);
 
-		V1ObjectMeta metadata = new V1ObjectMeta();
-		metadata.setName("hello-node");
-		metadata.setLabels(ImmutableMap.of("app", "hello-node"));
-
-		V1Container containersItem = new V1Container();
-		containersItem.setName("hello-node");
-		containersItem.setImage("gcr.io/hello-minikube-zero-install/hello-node");
-
-		V1PodSpec podSpec = new V1PodSpec();
-		podSpec.addContainersItem(containersItem);
-
-		V1PodTemplateSpec template = new V1PodTemplateSpec();
-		template.setMetadata(metadata);
-		template.spec(podSpec);
-
-		V1LabelSelector selector = new V1LabelSelector();
-		selector.setMatchLabels(ImmutableMap.of("app", "hello-node"));
-
-		ExtensionsV1beta1DeploymentSpec spec = new ExtensionsV1beta1DeploymentSpec();
-		spec.setTemplate(template);
-		spec.setSelector(selector);
-
-		ExtensionsV1beta1Deployment body = new ExtensionsV1beta1Deployment();
-		body.setMetadata(metadata);
-		body.setSpec(spec);
-
+		V1ObjectMeta metadata = new V1ObjectMeta()
+				.name("hello-node")
+				.labels(ImmutableMap.of("app", "hello-node"));
+		
+		ExtensionsV1beta1Deployment body = new ExtensionsV1beta1DeploymentBuilder()
+		.withMetadata(metadata)
+		.withSpec(new ExtensionsV1beta1DeploymentSpecBuilder()
+			.withTemplate(new V1PodTemplateSpecBuilder()
+				.withMetadata(metadata)
+				.withNewSpec()
+					.addNewContainer()
+						.withName("hello-node")
+						.withImage("gcr.io/hello-minikube-zero-install/hello-node")
+					.endContainer()
+				.endSpec()
+				.build()
+			)
+			.build()
+		)
+		.build();
+		
 		ExtensionsV1beta1Api api = new ExtensionsV1beta1Api(client);
 		try {
 			ExtensionsV1beta1Deployment r = api.createNamespacedDeployment(
