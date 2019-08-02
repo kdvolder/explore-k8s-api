@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cf-ssh-tunnel
+spec:
+  selector:
+    matchLabels:
+      app: cf-ssh-tunnel
+  template:
+    metadata:
+      labels:
+        app: cf-ssh-tunnel
+    spec:
+      containers:
+      - name: cf-ssh-tunnel
+        image: kdvolder/cf-ssh-tunnel
+        imagePullPolicy: Always
+        envFrom:
+          - configMapRef:
+              name: cf-config
+        resources: {}
