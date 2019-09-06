@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cf-config
+data:
+  CF_API: https://api.run.pivotal.io
+  CF_APP: pets
+  CF_ORG: FrameworksAndRuntimes
+  CF_PASSWORD: 'XXXXXXXXXX'
+  CF_SPACE: kdevolder
+  CF_USER: kdevolder@gopivotal.com
+  CF_JMX_PORT: '41609'
